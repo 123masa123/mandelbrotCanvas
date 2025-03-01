@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>マンデルブロ集合 可視化</title>
+  <style>
+    /* 余白・スクロールバーを消し、キャンバスを全画面表示 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="mandelbrotCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById('mandelbrotCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    
+    // 複素平面の初期パラメータを先に定義
+    let offsetX = -0.5;  // 中心位置
+    let offsetY = 0;
+    let scale = 3 / window.innerWidth;  // 初期スケール（画面幅が3になるように設定）
+    const maxIterations = 100;
+    
+    // キャンバスサイズの初期化とウィンドウリサイズ対応
+    function resizeCanvas() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      // 必要に応じてスケールを再設定する場合は以下を利用
+      // scale = 3 / width;
+      draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    
+    // HSLからRGBへの変換関数
+    function hslToRgb(h, s, l) {
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l;
+      } else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        }
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+    }
+    
+    // マンデルブロ集合描画関数
+    function draw() {
+      const imageData = ctx.createImageData(width, height);
+      const data = imageData.data;
+      
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          // キャンバス座標を複素平面座標に変換
+          const cx = x * scale - (width * scale) / 2 + offsetX;
+          const cy = y * scale - (height * scale) / 2 + offsetY;
+          let zx = 0, zy = 0, iteration = 0;
+          
+          // マンデルブロ集合の反復計算
+          while (zx * zx + zy * zy <= 4 && iteration < maxIterations) {
+            const xtemp = zx * zx - zy * zy + cx;
+            zy = 2 * zx * zy + cy;
+            zx = xtemp;
+            iteration++;
+          }
+          
+          const pixelIndex = (y * width + x) * 4;
+          if (iteration === maxIterations) {
+            data[pixelIndex] = data[pixelIndex+1] = data[pixelIndex+2] = 0;
+          } else {
+            // 反復回数に応じた HSL カラーリング
+            const hue = iteration / maxIterations;
+            const rgb = hslToRgb(hue, 1, 0.5);
+            data[pixelIndex]   = rgb[0];
+            data[pixelIndex+1] = rgb[1];
+            data[pixelIndex+2] = rgb[2];
+          }
+          data[pixelIndex+3] = 255; // 不透明度
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+    
+    // マウスドラッグによる平行移動の実装
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+    
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      dragStart.x = e.clientX;
+      dragStart.y = e.clientY;
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
+        offsetX -= dx * scale;
+        offsetY -= dy * scale;
+        dragStart.x = e.clientX;
+        dragStart.y = e.clientY;
+        draw();
+      }
+    });
+    
+    canvas.addEventListener('mouseup', () => { isDragging = false; });
+    canvas.addEventListener('mouseleave', () => { isDragging = false; });
+    
+    // マウスホイールによる拡大縮小の実装
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      const wheel = e.deltaY < 0 ? 1 : -1;
+      const zoom = Math.pow(zoomFactor, wheel);
+      
+      // マウス位置を複素平面座標に変換
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      const x = mouseX * scale - (width * scale) / 2 + offsetX;
+      const y = mouseY * scale - (height * scale) / 2 + offsetY;
+      
+      // ズーム後も同じ複素平面座標となるように調整
+      scale /= zoom;
+      offsetX = x - (mouseX * scale - (width * scale) / 2);
+      offsetY = y - (mouseY * scale - (height * scale) / 2);
+      draw();
+    });
+  </script>
+</body>
+</html>
